@@ -1,0 +1,141 @@
+In order to evaluate the alignment parameters, stage1 v2 using alignment metrics, stage1 v1 using variant calling.
+
+Direct Alignment Metrics Evaluation
+Using variant calling as a proxy for alignment quality involves many downstream processes that could obscure the direct impact of alignment parameters. Here's how we could modify Stage I to evaluate alignment quality directly:
+
+Alignment-Specific Metrics:
+
+Mapping Quality Distribution - Higher is generally better
+Properly Paired Read Percentage - Higher is generally better
+Alignment Rate - Higher is generally better
+Mismatch Rate - Lower is generally better
+Soft/Hard Clipping Rate - Lower is generally better for most applications
+
+
+Implementation Approach:
+
+I use samtools stats and samtools flagstat to collect these metrics
+For reference-based evaluation, we could use tools like Picard ValidateSamFile or GATK AnalyzeCovariates
+
+'''
+def evaluate_alignment_quality(bam_file):
+    """Evaluate alignment quality metrics directly from BAM file."""
+    metrics = {}
+    
+    # Run samtools flagstat
+    cmd = [Config.SAMTOOLS, "flagstat", bam_file]
+    output, _, _ = run_command(cmd, "Getting alignment statistics")
+    
+    # Parse flagstat output
+    for line in output.split('\n'):
+        if "properly paired" in line and "%" in line:
+            properly_paired_pct = float(line.split('(')[1].split('%')[0])
+            metrics["properly_paired_pct"] = properly_paired_pct
+        elif "mapped (" in line and "%" in line:
+            mapped_pct = float(line.split('(')[1].split('%')[0])
+            metrics["mapped_pct"] = mapped_pct
+    
+    # Run samtools stats for more detailed metrics
+    cmd = [Config.SAMTOOLS, "stats", bam_file]
+    output, _, _ = run_command(cmd, "Getting detailed alignment statistics")
+    
+    # Parse stats output
+    for line in output.split('\n'):
+        if line.startswith('SN\terror rate:'):
+            metrics["error_rate"] = float(line.split('\t')[2])
+        elif line.startswith('SN\taverage quality:'):
+            metrics["avg_quality"] = float(line.split('\t')[2])
+        elif line.startswith('SN\taverage length:'):
+            metrics["avg_read_length"] = float(line.split('\t')[2])
+        elif line.startswith('SN\tsequences:'):
+            metrics["total_reads"] = int(line.split('\t')[2])
+    
+    # Calculate overall alignment score (customize this based on your priorities)
+    alignment_score = (
+        0.4 * metrics.get("properly_paired_pct", 0) + 
+        0.3 * metrics.get("mapped_pct", 0) - 
+        0.3 * 100 * metrics.get("error_rate", 0)  # Convert error rate to percentage
+    )
+    
+    metrics["alignment_score"] = alignment_score
+    return metrics, alignment_score
+
+def objective(trial):
+    """Optuna objective function for alignment parameter optimization."""
+    # Generate trial parameters
+    params = {
+        'trial_number': trial.number,
+        'seed_length': trial.suggest_int('seed_length', Config.BWA_SEED_LENGTH_MIN, Config.BWA_SEED_LENGTH_MAX),
+        'match_score': trial.suggest_int('match_score', Config.BWA_MATCH_SCORE_MIN, Config.BWA_MATCH_SCORE_MAX),
+        'mismatch_penalty': trial.suggest_int('mismatch_penalty', Config.BWA_MISMATCH_PENALTY_MIN, Config.BWA_MISMATCH_PENALTY_MAX),
+        'gap_open_penalty': trial.suggest_int('gap_open_penalty', Config.BWA_GAP_OPEN_PENALTY_MIN, Config.BWA_GAP_OPEN_PENALTY_MAX),
+        'gap_extension_penalty': trial.suggest_int('gap_extension_penalty', Config.BWA_GAP_EXTENSION_PENALTY_MIN, Config.BWA_GAP_EXTENSION_PENALTY_MAX),
+        'optical_duplicate_pixel_distance': trial.suggest_int('optical_duplicate_pixel_distance', Config.OPTICAL_DUPLICATE_PIXEL_DISTANCE_MIN, Config.OPTICAL_DUPLICATE_PIXEL_DISTANCE_MAX)
+    }
+    
+    logger.info(f"Starting trial {trial.number} with parameters: {params}")
+    
+    # Output files for this trial
+    trial_dir = os.path.join(Config.OUTPUT_DIR, f"trial_{trial.number}")
+    os.makedirs(trial_dir, exist_ok=True)
+    
+    output_bam = os.path.join(trial_dir, "aligned.bam")
+    
+    try:
+        # Run alignment with trial parameters
+        run_alignment(fastq_r1, fastq_r2, output_bam, params)
+        
+        # Evaluate alignment quality directly
+        metrics, alignment_score = evaluate_alignment_quality(output_bam)
+        
+        # Log results
+        logger.info(f"Trial {trial.number} completed - Alignment score: {alignment_score:.4f}")
+        logger.info(f"Metrics: Properly paired: {metrics.get('properly_paired_pct', 0):.2f}%, " +
+                   f"Mapped: {metrics.get('mapped_pct', 0):.2f}%, " +
+                   f"Error rate: {metrics.get('error_rate', 0)*100:.4f}%")
+        
+        # Save trial details to CSV
+        trial_results = {
+            'trial_number': trial.number,
+            **params,
+            **metrics
+        }
+        
+        df = pd.DataFrame([trial_results])
+        results_csv = os.path.join(Config.OUTPUT_DIR, "trial_results.csv")
+        
+        if os.path.exists(results_csv):
+            df.to_csv(results_csv, mode='a', header=False, index=False)
+        else:
+            df.to_csv(results_csv, index=False)
+        
+        return alignment_score
+    
+    except Exception as e:
+        logger.error(f"Error in trial {trial.number}: {str(e)}")
+        return 0.0  # Return poorest score on error
+
+'''
+
+Considerations for this Approach
+
+Advantages:
+
+More direct evaluation of alignment quality
+Faster trials since no variant calling is needed
+Clearer correlation between parameters and alignment metrics
+
+
+Disadvantages:
+
+The relationship between alignment metrics and final variant calling accuracy may not be straightforward
+Optimizing for alignment metrics alone might not translate to better variant calling
+
+
+Hybrid Approach: maybe in v3 code
+
+You could use alignment metrics for Stage I optimization
+Then validate the top N parameter sets using variant calling accuracy
+This gives you the speed of direct alignment evaluation with the final validation against your ultimate goal
+
+

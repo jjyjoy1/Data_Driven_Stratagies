@@ -1,0 +1,89 @@
+# Configuration for GATK Pipeline Optimization with Optuna (Stage III)
+
+# Paths
+reference:
+  genome: "/path/to/reference/genome.fa"
+  dbsnp: "/path/to/dbsnp/dbsnp_146.hg38.vcf.gz"
+
+# Truth sets for evaluation
+truth_sets:
+  GIAB:
+    vcf: "/path/to/giab/HG001_GRCh38_GIAB_highconf.vcf.gz"
+    bed: "/path/to/giab/HG001_GRCh38_GIAB_highconf.bed"
+    rtg_sdf: "/path/to/rtg/reference/sdf"
+
+output:
+  directory: "/path/to/output/directory"
+  keep_intermediate: false
+
+# Resources
+computing:
+  threads: 8
+  memory: "16g"
+
+# Optimization settings
+optuna:
+  n_trials: 50
+  timeout: 86400  # 24 hours in seconds
+  seed: 42
+  sampler: "TPESampler"  # Options: TPESampler, RandomSampler, CmaEsSampler
+  pruner: "MedianPruner"  # Options: MedianPruner, PercentilePruner, NopPruner
+
+# Parameter search spaces for Stage III (Variant Filtration Optimization)
+parameter_ranges:
+  # SNP filter parameters
+  snp_filters:
+    QD:  # Quality by Depth
+      min: 2.0
+      max: 5.0
+    FS:  # FisherStrand
+      min: 30.0
+      max: 60.0
+    MQ:  # Mapping Quality
+      min: 40.0
+      max: 70.0
+    SOR:  # StrandOddsRatio
+      min: 3.0
+      max: 5.0
+    MQRankSum:  # Mapping Quality Rank Sum
+      min: -3.0
+      max: -1.0
+    ReadPosRankSum:  # Read Position Rank Sum
+      min: -3.0
+      max: -1.0
+  
+  # INDEL filter parameters
+  indel_filters:
+    QD:  # Quality by Depth
+      min: 2.0
+      max: 5.0
+    FS:  # FisherStrand
+      min: 150.0
+      max: 250.0
+    SOR:  # StrandOddsRatio
+      min: 7.0
+      max: 10.0
+    ReadPosRankSum:  # Read Position Rank Sum
+      min: -5.0
+      max: -1.0
+
+# Evaluation metrics
+evaluation:
+  primary_metric: "f_measure"  # Options: f_measure, precision, recall, combined
+  secondary_metrics: ["runtime", "snp_f_measure", "indel_f_measure"]
+  weights:
+    snp_f_measure: 0.7
+    indel_f_measure: 0.3
+    runtime: 0.0  # Set to a value > 0 to penalize longer runtimes
+  max_runtime: 3600  # Used to normalize runtime penalty if enabled
+
+# Whether to generate plots for filter distribution analysis
+generate_filter_plots: true
+
+# Custom filter formulas - advanced usage
+custom_filter_formulas:
+  enabled: false
+  # If enabled, these expressions will be used instead of default filters
+  snp_filter_expr: "QD < {QD} || FS > {FS} || MQ < {MQ} || SOR > {SOR} || MQRankSum < {MQRankSum} || ReadPosRankSum < {ReadPosRankSum}"
+  indel_filter_expr: "QD < {QD} || FS > {FS} || SOR > {SOR} || ReadPosRankSum < {ReadPosRankSum}"
+

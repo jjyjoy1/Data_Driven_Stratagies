@@ -1,0 +1,106 @@
+# Configuration for GATK Pipeline Optimization with Optuna (Stage II)
+
+# Paths
+reference:
+  genome: "/path/to/reference/genome.fa"
+  dbsnp: "/path/to/dbsnp/dbsnp_146.hg38.vcf.gz"
+
+samples:
+  NA12878:
+    fastq_r1: "/path/to/NA12878_R1.fastq.gz"
+    fastq_r2: "/path/to/NA12878_R2.fastq.gz"
+
+truth_sets:
+  GIAB:
+    vcf: "/path/to/giab/HG001_GRCh38_GIAB_highconf.vcf.gz"
+    bed: "/path/to/giab/HG001_GRCh38_GIAB_highconf.bed"
+    rtg_sdf: "/path/to/rtg/reference/sdf"
+
+output:
+  directory: "/path/to/output/directory"
+  keep_intermediate: false
+
+# Resources
+computing:
+  threads: 8
+  memory: "16g"
+
+# Subsampling settings
+subsampling:
+  enabled: true
+  ratio: 0.1  # 10% of the original data
+
+# Optimization settings
+optuna:
+  n_trials: 50
+  timeout: 86400  # 24 hours in seconds
+  seed: 42
+  sampler: "TPESampler"  # Options: TPESampler, RandomSampler, CmaEsSampler
+  pruner: "MedianPruner"  # Options: MedianPruner, PercentilePruner, NopPruner
+
+# Parameter search spaces for Stage II (HaplotypeCaller Optimization)
+parameter_ranges:
+  # BWA-MEM parameters
+  bwa_mem:
+    seed_length:  # -k
+      min: 14
+      max: 25
+    match_score:  # -A
+      min: 1
+      max: 2
+    mismatch_penalty:  # -B
+      min: 2
+      max: 6
+    gap_open_penalty:  # -O
+      min: 4
+      max: 12
+    gap_extension_penalty:  # -E
+      min: 1
+      max: 4
+  
+  # MarkDuplicates parameters
+  mark_duplicates:
+    optical_duplicate_pixel_distance:
+      min: 50
+      max: 300
+
+  #GATK Haplotype Caller paramaters
+  haplotype_caller:
+    heterozygosity:  # default: 0.001
+      min: 0.0005
+      max: 0.003
+    indel_heterozygosity:  # default: 0.000125
+      min: 0.00005
+      max: 0.0005
+    pcr_indel_model:  # default: CONSERVATIVE
+      options: ["NONE", "HOSTILE", "AGGRESSIVE", "CONSERVATIVE"]
+    min_pruning:  # default: 2
+      min: 1
+      max: 3
+    standard_min_confidence_threshold:  # default: 30
+      min: 10
+      max: 50
+    max_alternate_alleles:  # default: 6
+      enabled: false
+      min: 3
+      max: 10
+    max_genotype_count:  # default: 1024
+      enabled: false
+      min: 512
+      max: 2048
+
+# Evaluation metrics
+evaluation:
+  primary_metric: "f_measure"  # Options: f_measure, precision, recall, combined
+  secondary_metrics: ["runtime", "snp_f_measure", "indel_f_measure"]
+  weights:
+    f_measure: 1.0
+    snp_f_measure: 0.7
+    indel_f_measure: 0.3
+    runtime: 0.0  # Set to a value > 0 to penalize longer runtimes
+  max_runtime: 3600  # Used to normalize runtime penalty if enabled
+
+# Whether to run on the full dataset after optimization
+run_full_dataset: false
+
+

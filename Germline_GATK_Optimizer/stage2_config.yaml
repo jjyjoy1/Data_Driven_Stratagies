@@ -1,0 +1,38 @@
+# Configuration for GATK Pipeline Optimization with Optuna (Stage II)
+
+# Paths
+reference:
+  genome: "/path/to/reference/genome.fa"
+  dbsnp: "/path/to/dbsnp/dbsnp_146.hg38.vcf.gz"
+
+samples:
+  NA12878:
+    fastq_r1: "/path/to/NA12878_R1.fastq.gz"
+    fastq_r2: "/path/to/NA12878_R2.fastq.gz"
+
+truth_sets:
+  GIAB:
+    vcf: "/path/to/giab/HG001_GRCh38_GIAB_highconf.vcf.gz"
+    bed: "/path/to/giab/HG001_GRCh38_GIAB_highconf.bed"
+    rtg_sdf: "/path/to/rtg/reference/sdf"
+
+output:
+  directory: "/path/to/output/directory"
+  keep_intermediate: false
+
+# Resources
+computing:
+  threads: 8
+  memory: "16g"
+
+# Subsampling settings
+subsampling:
+  enabled: true
+  ratio: 0.1  # 10% of the original data
+
+# Optimization settings
+optuna:
+  n_trials: 50
+  timeout: 86400  # 24 hours in seconds
+  seed: 42
+  sampler: "TPES

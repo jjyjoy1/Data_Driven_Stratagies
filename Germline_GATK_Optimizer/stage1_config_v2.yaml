@@ -1,0 +1,88 @@
+# Configuration for GATK Pipeline Optimization with Optuna (Stage I - Alignment Metrics)
+
+# Paths
+reference:
+  genome: "/path/to/reference/genome.fa"
+  dbsnp: "/path/to/dbsnp/dbsnp_146.hg38.vcf.gz"
+
+samples:
+  NA12878:
+    fastq_r1: "/path/to/NA12878_R1.fastq.gz"
+    fastq_r2: "/path/to/NA12878_R2.fastq.gz"
+
+output:
+  directory: "/path/to/output/directory"
+  keep_intermediate: false
+
+# Resources
+computing:
+  threads: 8
+  memory: "16g"
+
+# Tools (optional - will use commands from PATH if not specified)
+tools:
+  bwa: "bwa"
+  samtools: "samtools"
+  gatk: "gatk"
+  picard: "picard"
+  seqtk: "seqtk"
+
+# Subsampling settings
+subsampling:
+  enabled: true
+  ratio: 0.1  # 10% of the original data
+
+# Optimization settings
+optuna:
+  n_trials: 50
+  timeout: 86400  # 24 hours in seconds
+  seed: 42
+  sampler: "TPESampler"  # Options: TPESampler, RandomSampler, CmaEsSampler
+  pruner: "MedianPruner"  # Options: MedianPruner, PercentilePruner, NopPruner
+
+# Parameter search spaces for Stage I (Alignment Optimization)
+parameter_ranges:
+  # BWA-MEM parameters
+  bwa_mem:
+    seed_length:  # -k
+      min: 14
+      max: 25
+    match_score:  # -A
+      min: 1
+      max: 2
+    mismatch_penalty:  # -B
+      min: 2
+      max: 6
+    gap_open_penalty:  # -O
+      min: 4
+      max: 12
+    gap_extension_penalty:  # -E
+      min: 1
+      max: 4
+  
+  # MarkDuplicates parameters
+  mark_duplicates:
+    optical_duplicate_pixel_distance:
+      min: 50
+      max: 300
+
+# Alignment metrics evaluation settings
+alignment_metrics:
+  # Weights for different alignment metrics (positive = higher is better, negative = lower is better)
+  weights:
+    mapped_pct: 0.25           # Percentage of mapped reads
+    properly_paired_pct: 0.25  # Percentage of properly paired reads
+    avg_quality: 0.15          # Average base quality
+    error_rate: -0.20          # Alignment error rate (negative because lower is better)
+    duplicate_pct: -0.10       # Duplicate rate (negative because lower is better)
+    soft_clip_pct: -0.05       # Soft clipping percentage (negative because lower is better)
+  
+  # Optional: run Qualimap for additional metrics visualization
+  run_qualimap: false
+  
+  # Optional: run GATK ValidateSamFile for additional validation
+  run_validate_sam: false
+  
+  # Optional: run GATK CollectMultipleMetrics
+  run_collect_metrics: false
+
